@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Disaster Relief Route Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="form">
+    <label>Start (lng, lat):</label>
+    <input id="start" placeholder="88.3639,22.5726" />
+
+    <label>End (lng, lat):</label>
+    <input id="end" placeholder="88.3776,22.9836" />
+
+    <label>Blocked Roads (GeoJSON MultiPolygon):</label>
+    <textarea id="blocked" placeholder="Optional"></textarea>
+
+    <button onclick="getRoute()">Get Route</button>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
