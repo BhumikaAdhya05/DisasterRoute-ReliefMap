@@ -13,6 +13,7 @@ let isRerouted = false;
 let reroutePath = [];
 let movingMarker;
 let blockedPolygons = [];
+let reroutedRouteCoords = []; // add globally
 
 async function getRoute() {
   const start = document.getElementById("start").value.split(',').map(Number);
@@ -44,7 +45,10 @@ async function getRoute() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ start, end, blockedRoads: blocked })
     });
+
     const reroutedRoute = await reroutedRes.json();
+
+    reroutedRouteCoords = reroutedRoute.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
 
     if (!originalRoute.features || !reroutedRoute.features) {
       alert("Error: Invalid route response");
@@ -75,8 +79,17 @@ async function getRoute() {
 
     map.fitBounds(routeLayer.getBounds());
 
-    const originalCoords = originalRoute.features[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+    const originalCoords = (originalRoute.features && originalRoute.features[0])
+  ? originalRoute.features[0].geometry.coordinates.map(coord => [coord[1], coord[0]])
+  : [];
+
+  if (!originalCoords.length) {
+    alert("Original route could not be generated. Check coordinates or blocked region.");
+    return;
+  }
     simulateMovement(originalCoords, blocked, end);
+
+    console.log("Original route API response:", originalRoute);
 
   } catch (err) {
     console.error("Route fetching failed:", err);
@@ -146,11 +159,48 @@ async function fetchReroute(currentCoord, endCoord) {
 
     const data = await res.json();
 
-    if (!data.features) {
-      alert("Reroute failed: No valid route returned");
+    // ✅ Fallback: If reroute fails or is empty, retrace the original blue line
+    if (!data.features || !data.features[0]) {
+      alert("Reroute failed. Retracing original path from blocked point.");
+
+      // Get remaining path from currentCoord onward on original route
+      const originalCoords = routeLayer.toGeoJSON().features?.[0]?.geometry?.coordinates;
+      if (!originalCoords) {
+        console.error("No original route to fall back on.");
+        return;
+      }
+
+      // Transform to [lat, lng]
+      const allLatLng = originalCoords.map(coord => [coord[1], coord[0]]);
+
+      // Find index of currentCoord in the route (or closest)
+      // Find nearest point index in original route
+      let minDist = Infinity;
+      let startIdx = 0;
+      for (let i = 0; i < allLatLng.length; i++) {
+         const dLat = allLatLng[i][0] - currentCoord[0];
+         const dLng = allLatLng[i][1] - currentCoord[1];
+         const dist = dLat * dLat + dLng * dLng;
+         if (dist < minDist) {
+           minDist = dist;
+           startIdx = i;
+          }
+      }
+
+      const fallbackCoords = startIdx >= 0 ? allLatLng.slice(startIdx) : [];
+
+      if (fallbackCoords.length > 1) {
+        L.polyline(fallbackCoords, { color: 'green', weight: 4 }).addTo(map);
+        simulationIndex = 0;
+        simulateMovement(fallbackCoords, blockedPolygons, endCoord);
+      } else {
+        alert("No fallback path available.");
+      }
+
       return;
     }
 
+    // ✅ Successful reroute case
     const newCoords = data.features[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
     reroutePath = newCoords;
 
@@ -158,10 +208,8 @@ async function fetchReroute(currentCoord, endCoord) {
 
     simulationIndex = 0;
     simulateMovement(newCoords, blockedPolygons, endCoord);
-
   } catch (err) {
     console.error("Rerouting error:", err);
     alert("Rerouting failed. See console for error.");
   }
 }
-
